@@ -1,0 +1,61 @@
+import threading
+import requests
+from bs4 import BeautifulSoup
+from queue import Queue
+
+# Lock for thread-safe printing
+print_lock = threading.Lock()
+
+# Function to scrape a single URL
+def scrape_url(url, q):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            title = soup.find('title').get_text()
+            with print_lock:
+                print(f"URL: {url} | Title: {title}")
+        else:
+            with print_lock:
+                print(f"Failed to scrape {url}. Status code: {response.status_code}")
+    except Exception as e:
+        with print_lock:
+            print(f"Error scraping {url}: {e}")
+    finally:
+        q.task_done()
+
+# Function to manage threads and URL queue
+def run_scraper(urls):
+    q = Queue()
+
+    # Create worker threads
+    for _ in range(5):  # Number of threads to use
+        t = threading.Thread(target=worker, args=(q,))
+        t.daemon = True  # Allows the thread to exit when the main program exits
+        t.start()
+
+    # Enqueue URLs for scraping
+    for url in urls:
+        q.put(url)
+
+    # Wait for all tasks to complete
+    q.join()
+
+# Worker function to process queue
+def worker(q):
+    while True:
+        url = q.get()
+        scrape_url(url, q)
+
+# Main function to start the scraper
+if __name__ == '__main__':
+    urls_to_scrape = [
+        "https://www.example.com",
+        "https://www.python.org",
+        "https://www.github.com",
+        # Add more URLs here
+    ]
+    
+    print("Starting multithreaded web scraper...")
+    run_scraper(urls_to_scrape)
+    print("Scraping complete!")
